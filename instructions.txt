@@ -1,261 +1,161 @@
-Step-by-Step Implementation Guide for Local AI Medical Assistant
-Project Overview
-You're building a local medical AI assistant with RAG capabilities, conversation memory management, and persistent storage - all running on a local LLM (Qwen2.5-3B-Instruct).
 
-The local LLM is setup in /home/tanmay/Desktop/python-projects/hackday-llama/llama-cpp-samples/models
+🥗 Step-by-Step Implementation Guide for Local AI Dietary Assistant
 
-You can refer the files installed in the virtual Environment: /home/tanmay/Desktop/python-projects/hackday-llama/venv
+This guide provides a comprehensive roadmap for building a personalized dietary and nutrition coach using a local LLM (Qwen2.5-3B-Instruct), integrating Retrieval-Augmented Generation (RAG) for knowledge and user data, and a robust memory system focused on tracking dietary habits and blood reports.
 
 Phase 1: Project Setup and Environment
-Step 1: Create Project Structure
-Create a well-organized directory structure:
 
-Main project folder
-Subdirectory for medical documents (RAG knowledge base)
-Subdirectory for memory files (short_term and long_term)
-Subdirectory for vector database storage (for RAG embeddings)
-Main application script file
-Configuration file for settings
-Requirements/dependencies file
+
+Step 1: Create Project Structure
+
+Establish the following organized directory structure:
+Main project folder (e.g., DietAI)
+/nutrition_docs: Stores general nutrition reference files for RAG.
+/user_data: Stores user-specific files (blood report summaries, preferences JSON).
+/memory: Stores conversation history (short_term_memory.txt, long_term_memory.txt).
+/vector_db: Stores FAISS/ChromaDB index files for RAG.
+main.py: The core application script.
+config.ini: Configuration settings.
+requirements.txt: Project dependencies.
 
 Step 2: Install Required Dependencies
-Install the following Python packages:
 
-llama-cpp-python (already working for you)
-sentence-transformers (for creating embeddings of medical documents)
-faiss-cpu or chromadb (vector database for RAG implementation)
-python-dotenv (for configuration management)
+Ensure the following Python packages are installed in your environment:
+llama-cpp-python
+sentence-transformers
+faiss-cpu (or chromadb)
+python-dotenv
 Standard libraries: json, datetime, pathlib, os
 
+Phase 2: RAG and Personal Data Integration
 
-Phase 2: RAG Implementation Setup
-Step 3: Prepare Medical Documents
+The RAG system is designed to provide both general nutrition facts and highly personalized context (blood reports, preferences).
 
-Place all medical reference documents (.txt files) in your medical documents directory
-Ensure documents are properly formatted and readable
-Consider organizing by categories (symptoms, treatments, medications, etc.)
+Step 3: Prepare Nutrition and Personal Data
+
+General Nutrition Knowledge: Place comprehensive documents on macronutrients, caloric content, healthy recipes, and dietary guidelines (.txt files) in /nutrition_docs.
+User Preferences File: Create a structured file (e.g., user_data/preferences.json) to store key user choices:
+Allergies
+Dietary Style (e.g., Vegan, Keto, Paleo)
+Cuisine Preferences
+Stated Macro Goals (e.g., 40% Carb, 30% Protein, 30% Fat)
+Blood Report Data: Create a system to input or parse key metrics (e.g., cholesterol, glucose, iron) into a summarized, contextual text format (user_data/blood_report_summary.txt) for the LLM.
 
 Step 4: Build the Document Embedding System
-Create a module that:
 
-Reads all .txt files from the medical documents directory
-Splits documents into manageable chunks (200-500 words each with overlap)
-Uses a local embedding model (like 'all-MiniLM-L6-v2' from sentence-transformers) to convert text chunks into vectors
-Stores these embeddings in a vector database (FAISS or ChromaDB)
-Creates an index that maps embeddings back to original text chunks
+Create an initial script that runs on startup/data change:
+Chunking: Reads and splits files in /nutrition_docs into manageable chunks (e.g., 400 words with 50-word overlap).
+Embedding: Uses an embedding model (e.g., 'all-MiniLM-L6-v2') to convert all text chunks into vectors.
+Indexing: Stores these vectors in a vector database (faiss-cpu or chromadb) and saves the index in /vector_db.
 
-Step 5: Implement Document Retrieval Function
-Create a function that:
+Step 5: Implement Context Retrieval Function (get_context)
 
-Takes a user query as input
-Converts the query into an embedding vector
-Searches the vector database for the most similar document chunks (top 3-5 results)
-Returns the relevant text passages to be used as context
-
+This function prioritizes user data before retrieving general knowledge:
+Input: User query (string).
+Retrieve Personal Context: Load the text content from user_data/preferences.json (formatted into a prompt string) and user_data/blood_report_summary.txt.
+Retrieve General Context: Convert the user query into a vector, search the RAG index for the top 3-5 most similar nutrition text chunks.
+Output: Returns a combined, structured string containing both the personal context and the retrieved general nutrition knowledge.
 
 Phase 3: Memory Management System
-Step 6: Initialize Memory Files
-Create two text files in your memory directory:
 
-short_term_memory.txt (stores recent conversation summaries)
-long_term_memory.txt (stores comprehensive conversation history)
+The memory system tracks recent dialogue and long-term dietary progress.
+
+Step 6: Initialize Memory Files
+
+Ensure two text files exist in the /memory directory (create them if they do not exist):
+short_term_memory.txt (for the current session, up to 10 message pairs).
+long_term_memory.txt (for summaries of previous sessions).
 
 Step 7: Build Message Counter System
-Implement a mechanism to:
 
-Track the number of user messages in the current conversation
-Increment counter with each user message
-Trigger summarization when counter reaches 10
+Implement a simple counter in the main application loop to:
+Track the number of user messages in the current conversation.
+Increment the counter after each user input.
+Trigger the summarization function (Step 8) when the counter reaches a threshold (e.g., 10 messages).
 
 Step 8: Create Short-Term Memory Summarization
-Build a function that:
 
-Collects the last 10 messages (5 user + 5 assistant pairs)
-Formats them into a conversation transcript
-Sends to the LLM with a specific prompt requesting a concise medical summary
-Appends the summary to short_term_memory.txt with a timestamp
-Resets the message counter
+Build a function triggered by the message counter:
+Collect the last 10 raw messages (5 user inputs, 5 assistant responses).
+Send the transcript to the LLM with a specific prompt: "Summarize this conversation batch, focusing on meals discussed, any new preferences/allergies mentioned, and the recommended macro split."
+Append the resulting summary and a timestamp to memory/short_term_memory.txt.
+Reset the message counter to 0.
 
 Step 9: Create Long-Term Memory System
-Implement functions for:
 
-End of conversation: Read all content from short_term_memory.txt, send to LLM for comprehensive summarization, append to long_term_memory.txt with session date, clear short_term_memory.txt
-Start of conversation: Read long_term_memory.txt, extract recent relevant history (last 2-3 sessions), format as context for the new conversation
-
+Implement two core memory operations:
+End of Conversation (/exit command):
+Read all content from short_term_memory.txt.
+Send to the LLM for comprehensive summarization: "Consolidate this short-term history into key long-term dietary trends, macro compliance, and persistent recommendations."
+Append the comprehensive summary to memory/long_term_memory.txt with the session date.
+Clear the content of memory/short_term_memory.txt.
+Start of Conversation:
+Read memory/long_term_memory.txt.
+Extract the last 2-3 session summaries.
+Format these summaries as context to be included in the new conversation's system prompt.
 
 Phase 4: Core Application Logic
-Step 10: Build the Main Conversation Loop
-Create the primary application flow:
 
-Welcome message and system initialization
-Load long-term memory context at startup
-Enter continuous input loop for user messages
-Exit command to end conversation gracefully
+
+Step 10: Build the Main Conversation Loop
+
+Structure the main.py flow:
+Display welcome message and initial Dietary Disclaimer (Step 23).
+Load and initialize the local LLM (Qwen2.5-3B-Instruct).
+Load the embedding model and RAG index.
+Load the long-term memory context (Step 9).
+Enter a continuous while True loop for user input, breaking only on the /exit command.
 
 Step 11: Implement Query Processing Pipeline
-For each user message, create a workflow:
 
-Receive and validate user input
-Retrieve relevant medical documents using RAG (Step 5)
-Load current memory context (long-term + short-term)
-Construct comprehensive prompt combining: system instructions (medical expert role), memory context, RAG retrieved documents, and user query
-Send to local LLM for generation
-Store message pair in temporary conversation buffer
-Increment message counter and check if summarization needed
+This is the core workflow for every user message:
+Receive Input: Get user message. Check for special commands (Step 17).
+Retrieve Context: Call get_context (Step 5) to retrieve personalized and general RAG documents.
+Load Memory: Load the current session's short-term memory (raw messages or recent summary).
+Construct Prompt: Build the complete prompt by combining, in order of priority:
+System Prompt (Step 12)
+Personal Blood Report/Preference Context
+Long-Term Memory
+Short-Term Memory
+RAG Retrieved Documents
+User Query
+Generate Response: Send the prompt to the local LLM for generation (tuned for consistency: $\text{temperature} \approx 0.3-0.5$).
+Update Memory Buffer: Store the user message and assistant response in a temporary buffer.
+Trigger Check: Increment the message counter and check if summarization (Step 8) is needed.
 
 Step 12: Design the System Prompt
-Craft a detailed system prompt that:
 
-Defines the AI's role as a medical advisor
-Sets appropriate guardrails (not a replacement for professional medical care)
-Instructs to prioritize information from provided medical documents
-Specifies tone (professional, empathetic, clear)
-Includes disclaimer about seeking professional medical attention for emergencies
+Craft a detailed prompt that defines the AI's role and constraints:
+"You are an expert Personalized Nutrition and Macro Coach. Your primary directive is to provide meal and dietary recommendations that strictly align with the user's provided blood report data and stated macro goals/preferences. Your responses must be professional, motivational, and scientifically grounded. Always include the estimated macronutrient breakdown (Carbs/Protein/Fat) for any meal recommendation. You are not a registered dietitian or a medical doctor; remind the user to consult a professional for chronic conditions."
+
+Phase 5-8: Enhancements, Testing, and Deployment
 
 
-Phase 5: Enhanced Features
 Step 13: Add Context Window Management
-Implement logic to:
 
-Track total token count of the conversation context
-Keep context within LLM's limits (your model has 2048 tokens)
-Prioritize: system prompt > RAG documents > recent memory > older memory
-Truncate older messages if needed while preserving critical medical information
-
-Step 14: Implement Conversation Persistence
-Create functionality to:
-
-Save entire raw conversation to a dated log file when session ends
-Allow users to resume previous conversations (optional)
-Maintain conversation ID/session tracking
-
-Step 15: Add Error Handling and Validation
-Build robust error handling for:
-
-Missing memory files (create if don't exist)
-Empty or corrupted RAG database (rebuild prompt)
-LLM generation failures (retry mechanism)
-Invalid user input (validation and feedback)
-File I/O errors (graceful degradation)
-
-
-Phase 6: User Interface and Experience
-Step 16: Create Command-Line Interface
-Build a clean CLI that includes:
-
-Clear visual separators between user and assistant messages
-Command options: /exit, /clear, /help, /history
-Loading indicators during RAG retrieval and LLM generation
-Character counter or input validation
+Implement logic to track the total token count of the final prompt (max 2048 tokens for your model):
+Prioritization (must keep): System Prompt, Blood Report Data.
+Prioritization (flexible): RAG Documents, Recent Short-Term Memory, Older Long-Term Memory.
+Truncate older memory entries or reduce RAG retrieval count if the token limit is exceeded.
 
 Step 17: Add Conversation Commands
-Implement special commands:
 
-/exit: Trigger end-of-conversation summarization and save
-/clear: Reset current conversation but keep memories
-/history: Display summaries from long_term_memory.txt
-/help: Show available commands and usage tips
-
-
-Phase 7: Testing and Optimization
-Step 18: Test Each Component Individually
-Verify:
-
-RAG retrieval returns relevant medical information
-Summarization produces coherent, medically accurate summaries
-Memory files are properly read/written
-LLM responses incorporate provided context
-Message counter triggers at correct intervals
-
-Step 19: Test End-to-End Workflows
-Simulate complete user journeys:
-
-New user with no history
-Returning user with existing long-term memory
-Conversation spanning multiple summarization cycles
-Edge cases (very long messages, medical emergencies, unclear queries)
+Implement the following special commands in the main.py loop:
+/exit: Trigger end-of-conversation summarization and save (Step 9).
+/clear: Reset current session (short_term_memory.txt) but preserve long_term_memory.txt.
+/history: Display all summaries from long_term_memory.txt.
+/goals: Display the current blood report summary and dietary preferences.
 
 Step 20: Optimize Performance
-Fine-tune:
 
-RAG chunk size and overlap for better retrieval
-Number of retrieved documents (balance context vs. relevance)
-Summarization prompt for better quality/brevity
-LLM generation parameters (temperature, top_p, max_tokens)
-Vector database indexing for faster searches
+Tune the system for high-quality, relevant results:
+RAG: Fine-tune chunk size and overlap. Experiment with the number of retrieved documents.
+LLM Parameters: Use a low temperature (e.g., $0.4$) for consistent, fact-based nutritional advice.
+Indexing: Load the embedding model and vector database once at startup for speed.
 
+Step 23: Add Dietary Disclaimer System
 
-Phase 8: Documentation and Deployment
-Step 21: Create Configuration File
-Build a config file with:
-
-File paths (model, documents, memory, database)
-LLM parameters (n_ctx, temperature, max_tokens)
-RAG settings (chunk size, retrieval count)
-Summarization interval (currently 10 messages)
-System prompts and disclaimers
-
-Step 22: Write User Documentation
-Document:
-
-Installation instructions
-How to add medical documents
-Available commands and features
-Privacy and data storage explanation
-Limitations and when to seek real medical help
-Troubleshooting common issues
-
-Step 23: Add Medical Disclaimer System
-Implement:
-
-Disclaimer shown at application startup
-Reminder to consult healthcare professionals
-Detection of emergency keywords (chest pain, suicide, severe bleeding) with immediate professional care recommendations
-Ethical AI usage guidelines
-
-
-Implementation Priority Order
-Critical Path (Minimum Viable Product):
-
-Steps 1-2: Environment setup
-Steps 10-12: Basic conversation loop with LLM
-Steps 3-5: RAG implementation
-Steps 6-9: Memory management
-Step 15: Basic error handling
-
-Enhancement Phase:
-6. Steps 13-14: Context management and persistence
-7. Steps 16-17: Improved UI/UX
-8. Steps 18-20: Testing and optimization
-9. Steps 21-23: Documentation and safety features
-
-Key Technical Considerations
-RAG Best Practices:
-
-Use semantic chunking (split by paragraphs/sections, not arbitrary character counts)
-Include metadata (document title, section) with chunks
-Experiment with retrieval count (3-5 documents usually optimal)
-Consider hybrid search (keyword + semantic) for medical terms
-
-Memory Management Tips:
-
-Keep summaries concise (100-200 words per 10-message batch)
-Include key medical terms, symptoms, and recommendations in summaries
-Use structured format (bullet points) in memory files for easier parsing
-Timestamp all entries for temporal context
-
-LLM Integration Notes:
-
-Your existing Llama integration will work perfectly for this
-Adjust max_tokens based on response needs (200-500 for medical advice)
-Consider temperature=0.3-0.5 for more consistent medical responses
-Use stop sequences to prevent overly long responses
-
-Performance Optimization:
-
-Load embedding model and vector database once at startup (not per query)
-Cache frequently retrieved documents
-Use batch processing for initial document indexing
-Monitor memory usage with large conversation histories
-
-This guide provides a complete roadmap. Start with the critical path, test thoroughly, then add enhancements iteratively.
+Implement safety features:
+Disclaimer: Show a clear disclaimer at application startup stating that the assistant is an informational tool and not a substitute for a licensed healthcare professional or registered dietitian.
+Emergency Guardrails: Implement keyword detection (e.g., "anorexia," "severe pain," "suicide") and immediately advise seeking professional help or emergency services.
+Would you like to start by focusing on the critical RAG components (Steps 3-5) to handle the blood report and preference data?
